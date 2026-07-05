@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.env
+.streamlit/
+*.log
+verify_nlp.py
+verify_ai.py
+check_medspacy.py
+check_scispacy.py
+check_model_path.py
+check_ollama.py
+check_ollama_json.py
+check_env.py
+check_moon_env.py
+find_config.py
+patch_config.py
