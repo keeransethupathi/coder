@@ -510,22 +510,23 @@ if st.session_state.analysis_results:
                 cleaned_code = code_obj.code.strip().upper()
                 
                 # Render code card header
-                st.markdown(f"""
-                <div style="background: linear-gradient(135deg, #0f172a 0%, #020617 100%); border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-top: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
-                        <span style="font-size: 20px; font-weight: 700; color: #38bdf8;">Code Mapped: {cleaned_code}</span>
-                        <span style="background-color: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(56, 189, 248, 0.2);">
-                            Confidence: {code_obj.confidence * 100:.1f}%
-                        </span>
-                    </div>
-                    <div style="margin-top: 12px; color: #e2e8f0; font-size: 15px;">
-                        <strong>Procedure:</strong> {code_obj.procedure_name}
-                    </div>
-                    <div style="margin-top: 6px; color: #94a3b8; font-size: 14px; line-height: 1.5;">
-                        <strong>Justification:</strong> {code_obj.justification}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                card_header_html = (
+                    f'<div style="background: linear-gradient(135deg, #0f172a 0%, #020617 100%); border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-top: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">'
+                    f'<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">'
+                    f'<span style="font-size: 20px; font-weight: 700; color: #38bdf8;">Code Mapped: {cleaned_code}</span>'
+                    f'<span style="background-color: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(56, 189, 248, 0.2);">'
+                    f'Confidence: {code_obj.confidence * 100:.1f}%'
+                    f'</span>'
+                    f'</div>'
+                    f'<div style="margin-top: 12px; color: #e2e8f0; font-size: 15px;">'
+                    f'<strong>Procedure:</strong> {code_obj.procedure_name}'
+                    f'</div>'
+                    f'<div style="margin-top: 6px; color: #94a3b8; font-size: 14px; line-height: 1.5;">'
+                    f'<strong>Justification:</strong> {code_obj.justification}'
+                    f'</div>'
+                    f'</div>'
+                )
+                st.markdown(card_header_html, unsafe_allow_html=True)
                 
                 # Visual Grid Breakdown of the 7 characters
                 st.markdown("###### 🔍 7-Character Axis Code Breakdown")
@@ -536,14 +537,14 @@ if st.session_state.analysis_results:
                 # Generate Grid items
                 grid_items = ""
                 for char in breakdown_list:
-                    grid_items += f"""
-                    <div class="breakdown-box">
-                        <div class="breakdown-label">Pos {char.position}</div>
-                        <div class="breakdown-char">{char.character}</div>
-                        <div class="breakdown-label">{char.name}</div>
-                        <div class="breakdown-desc" title="{char.value_description}">{char.value_description}</div>
-                    </div>
-                    """
+                    grid_items += (
+                        f'<div class="breakdown-box">'
+                        f'<div class="breakdown-label">Pos {char.position}</div>'
+                        f'<div class="breakdown-char">{char.character}</div>'
+                        f'<div class="breakdown-label">{char.name}</div>'
+                        f'<div class="breakdown-desc" title="{char.value_description}">{char.value_description}</div>'
+                        f'</div>'
+                    )
                 
                 # Render grid
                 st.markdown(f'<div class="breakdown-grid">{grid_items}</div>', unsafe_allow_html=True)
