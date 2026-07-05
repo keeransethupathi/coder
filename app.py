@@ -478,21 +478,7 @@ if st.session_state.analysis_results:
                 )
                 st.markdown(card_header_html, unsafe_allow_html=True)
                 
-                # Make sure the breakdown is sorted and complete
-                breakdown_list = sorted(code_obj.breakdown, key=lambda x: x.position)
-                
-                # Render a detailed mapping table for readability/export
-                table_data = []
-                for char in breakdown_list:
-                    table_data.append({
-                        "Position": f"Char {char.position}",
-                        "Character Code": char.character,
-                        "ICD-10-PCS Axis Name": char.name,
-                        "Axis Description Value": char.value_description
-                    })
-                
-                st.dataframe(pd.DataFrame(table_data), width="stretch", hide_index=True)
-                st.write("")
+
                 
     with tab2:
         # Highlighted Medical Entities via local spacy
