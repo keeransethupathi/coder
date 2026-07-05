@@ -599,7 +599,10 @@ if st.session_state.analysis_results:
         output_dict = res.model_dump()
         # Add NLP entities
         if st.session_state.nlp_entities:
-            output_dict["extracted_entities"] = st.session_state.nlp_entities
+            output_dict["extracted_entities"] = [
+                ent.model_dump() if hasattr(ent, "model_dump") else ent
+                for ent in st.session_state.nlp_entities
+            ]
             
         json_str = json.dumps(output_dict, indent=2)
         
