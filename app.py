@@ -397,10 +397,13 @@ if analyze_button:
     if not report_input.strip() or report_input == report_placeholder:
         st.error("Please insert surgical report text to analyze.")
     else:
+        # Sanitize report input to strip emojis/non-ASCII characters
+        clean_report = report_input.encode("ascii", errors="ignore").decode("ascii")
+        
         # Run local fast NLP
         with st.spinner("Extracting clinical concepts with local spaCy model..."):
             try:
-                entities = extract_entities(report_input)
+                entities = extract_entities(clean_report)
                 st.session_state.nlp_entities = entities
             except Exception as nlp_err:
                 st.error(f"Local NLP extraction warning: {nlp_err}")
@@ -410,11 +413,11 @@ if analyze_button:
         with st.spinner(f"Generating clinical summary and mapping codes..."):
             try:
                 if force_mock:
-                    results = get_mock_analysis(report_input)
+                    results = get_mock_analysis(clean_report)
                 elif "gemini" in backend_choice.lower():
-                    results = analyze_surgical_report_gemini(report_input, api_key.strip(), model_option)
+                    results = analyze_surgical_report_gemini(clean_report, api_key.strip(), model_option)
                 else:
-                    results = analyze_surgical_report_ollama(report_input, model_option, ollama_host)
+                    results = analyze_surgical_report_ollama(clean_report, model_option, ollama_host)
                 st.session_state.analysis_results = results
                 st.session_state.nlp_entities = results.entities
             except Exception as ai_err:
