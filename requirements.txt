@@ -1,8 +1,8 @@
 streamlit>=1.30.0
 spacy>=3.7.0
-scispacy>=0.5.5
 google-genai>=2.0.0
 python-dotenv>=1.0.0
 pandas>=2.0.0
 pysbd>=0.3.4
-https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_sm-0.5.4.tar.gz
+ollama>=0.3.0
+pydantic>=2.0.0

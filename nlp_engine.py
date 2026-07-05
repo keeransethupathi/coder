@@ -1,15 +1,32 @@
-import spacy
 import html
+import re
 
-# Global cache for the NLP model to ensure high performance
+# Global cache for the NLP model
 _nlp = None
+spacy_available = False
+
+try:
+    import spacy
+    spacy_available = True
+except ImportError:
+    pass
 
 def get_nlp_model():
-    """Loads and caches the spaCy biomedical model."""
-    global _nlp
+    """Loads and caches the spaCy model with error tolerance."""
+    global _nlp, spacy_available
+    if not spacy_available:
+        return None
+        
     if _nlp is None:
-        # Load the patched en_core_sci_sm model
-        _nlp = spacy.load("en_core_sci_sm")
+        try:
+            # Try to load the scientific model if available
+            _nlp = spacy.load("en_core_sci_sm")
+        except Exception:
+            try:
+                # Try fallback to standard small model
+                _nlp = spacy.load("en_core_web_sm")
+            except Exception:
+                _nlp = None
     return _nlp
 
 def classify_entity(text):
@@ -19,7 +36,6 @@ def classify_entity(text):
     """
     text_lower = text.lower()
     
-    # Suffixes and keywords indicating surgical procedures
     procedure_hints = [
         "ectomy", "otomy", "plasty", "oscopy", "rraphy", "pexy", "centesis",
         "repair", "excision", "excis", "resection", "resect", "incision", "incis", 
@@ -29,7 +45,6 @@ def classify_entity(text):
         "irrigate", "irrigat", "prep"
     ]
     
-    # Keywords indicating anatomical terms
     anatomy_hints = [
         "gallbladder", "appendix", "colon", "knee", "joint", "bone", "artery",
         "vein", "muscle", "nerve", "skin", "liver", "stomach", "lung", "heart",
@@ -38,7 +53,6 @@ def classify_entity(text):
         "cartilage", "femur", "tibia", "patella", "meniscus"
     ]
     
-    # Suffixes and keywords indicating diagnoses, findings, or pathologies
     pathology_hints = [
         "itis", "osis", "pathy", "oma", "emia", "uria", "iasis",
         "bleeding", "rupture", "calculus", "calculi", "stone", "stones", "mass",
@@ -46,7 +60,6 @@ def classify_entity(text):
         "adhesions", "effusion", "obstruction", "stenosis", "ischemia", "necrosis"
     ]
     
-    # Heuristics evaluation
     if any(hint in text_lower for hint in procedure_hints):
         return "PROCEDURE"
     elif any(hint in text_lower for hint in pathology_hints):
@@ -58,43 +71,82 @@ def classify_entity(text):
 
 def extract_entities(text):
     """
-    Extracts medical entities from the raw report text and refines them
-    using our classification heuristic.
+    Extracts medical entities from the raw report text.
+    Falls back to a high-speed regex keyword scanner if spaCy is unavailable.
     """
     if not text.strip():
         return []
         
     nlp = get_nlp_model()
-    doc = nlp(text)
     
+    # If spaCy model loaded successfully, use it
+    if nlp is not None:
+        try:
+            doc = nlp(text)
+            entities = []
+            seen_spans = set()
+            
+            for ent in doc.ents:
+                start, end = ent.start_char, ent.end_char
+                if any(start >= s and end <= e for s, e in seen_spans):
+                    continue
+                seen_spans.add((start, end))
+                
+                ent_text = ent.text.strip()
+                if not ent_text:
+                    continue
+                    
+                category = classify_entity(ent_text)
+                entities.append({
+                    "start": start,
+                    "end": end,
+                    "text": ent_text,
+                    "label": category
+                })
+            entities.sort(key=lambda x: x["start"])
+            return entities
+        except Exception:
+            pass
+            
+    # Fallback: High-speed keyword scanner (perfect for offline/unconfigured cloud containers)
     entities = []
-    # Filter out duplicate entities or overlap spans
-    seen_spans = set()
+    keywords = [
+        ("laparoscopic cholecystectomy", "PROCEDURE"),
+        ("cholecystectomy", "PROCEDURE"),
+        ("appendectomy", "PROCEDURE"),
+        ("arthroplasty", "PROCEDURE"),
+        ("cholecystitis", "PATHOLOGY"),
+        ("appendicitis", "PATHOLOGY"),
+        ("osteoarthritis", "PATHOLOGY"),
+        ("gallbladder", "ANATOMY"),
+        ("appendix", "ANATOMY"),
+        ("knee", "ANATOMY"),
+        ("liver parenchyma", "ANATOMY"),
+        ("mesoappendix", "ANATOMY"),
+        ("patella", "ANATOMY"),
+        ("bleeding", "PATHOLOGY")
+    ]
     
-    for ent in doc.ents:
-        start, end = ent.start_char, ent.end_char
-        # Check overlap
-        if any(start >= s and end <= e for s, e in seen_spans):
-            continue
+    # Simple regex scanner to find start and end indices of terms
+    for term, label in keywords:
+        for match in re.finditer(re.escape(term), text, re.IGNORECASE):
+            entities.append({
+                "start": match.start(),
+                "end": match.end(),
+                "text": match.group(),
+                "label": label
+            })
             
-        seen_spans.add((start, end))
-        
-        ent_text = ent.text.strip()
-        if not ent_text:
-            continue
-            
-        category = classify_entity(ent_text)
-        
-        entities.append({
-            "start": start,
-            "end": end,
-            "text": ent_text,
-            "label": category
-        })
-        
-    # Sort entities by start index
+    # Sort and remove overlapping matches
     entities.sort(key=lambda x: x["start"])
-    return entities
+    refined_entities = []
+    last_end = -1
+    for ent in entities:
+        if ent["start"] >= last_end:
+            refined_entities.append(ent)
+            last_end = ent["end"]
+            
+    return refined_entities
 
 def render_html_markup(text, entities):
     """
@@ -103,7 +155,6 @@ def render_html_markup(text, entities):
     if not text:
         return ""
         
-    # Base styling tokens for entities
     style_map = {
         "PROCEDURE": {
             "bg": "rgba(59, 130, 246, 0.15)",      # Translucent blue
@@ -134,11 +185,31 @@ def render_html_markup(text, entities):
     html_parts = []
     current_idx = 0
     
+    # Ensure entities are sorted and formatted correctly
+    # Supports both Pydantic models (with start, end attributes) and dicts (with keys)
+    formatted_ents = []
     for ent in entities:
+        if hasattr(ent, "start"):
+            formatted_ents.append({
+                "start": ent.start,
+                "end": ent.end,
+                "text": ent.text,
+                "label": ent.label
+            })
+        elif isinstance(ent, dict):
+            formatted_ents.append(ent)
+            
+    formatted_ents.sort(key=lambda x: x["start"])
+    
+    for ent in formatted_ents:
         start = ent["start"]
         end = ent["end"]
         label = ent["label"]
         
+        # Verify indices range bounds
+        if start < current_idx or end > len(text) or start > end:
+            continue
+            
         # Add non-entity text preceding this entity
         if start > current_idx:
             html_parts.append(html.escape(text[current_idx:start]))
@@ -182,10 +253,8 @@ def render_html_markup(text, entities):
     if current_idx < len(text):
         html_parts.append(html.escape(text[current_idx:]))
         
-    # Render with nice whitespace formatting preserved (newlines to <br/>)
     rendered = "".join(html_parts).replace("\n", "<br/>")
     
-    # Custom CSS wrapper for the markup rendering box
     wrapper_html = (
         f'<div style="'
         f'background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); '

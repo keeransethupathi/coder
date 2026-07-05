@@ -33,9 +33,16 @@ class SurgicalSummary(BaseModel):
     complications: str = Field(description="Complications encountered, or 'None'")
     operative_narrative_summary: str = Field(description="A concise summary of the surgical steps described in the report")
 
+class ClinicalEntity(BaseModel):
+    text: str = Field(description="The exact text of the medical/clinical concept found in the report")
+    label: str = Field(description="The category: PROCEDURE, ANATOMY, PATHOLOGY, or CLINICAL_CONCEPT")
+    start: int = Field(description="The start character index of this text in the report (0-indexed)")
+    end: int = Field(description="The end character index of this text in the report (0-indexed)")
+
 class ReportAnalysisResult(BaseModel):
     summary: SurgicalSummary = Field(description="Structured clinical summary of the report")
     icd10_codes: List[ICD10PCSCode] = Field(description="Suggested ICD-10-PCS procedure codes with breakdowns")
+    entities: List[ClinicalEntity] = Field(description="List of all key medical/clinical entities found in the text with offsets")
 
 # ----------------- DUAL BACKEND AI IMPLEMENTATION -----------------
 
@@ -48,8 +55,13 @@ def analyze_surgical_report_ollama(report_text: str, model_name: str = "meditron
         client = ollama.Client(host=host_url)
         
     prompt = f"""
-You are a senior clinical coding expert specializing in ICD-10-PCS (Procedure Coding System).
+You are a senior clinical coding expert specializing in ICD-10-PCS (Procedure Coding System) and Clinical NER (Named Entity Recognition).
 Analyze the following surgical report and generate a structured JSON response matching the requested schema.
+
+Guidelines for clinical entity extraction:
+- Extract all key clinical terms, organ names, procedures, and diagnoses.
+- For each entity, specify the exact start and end character indices in the original text (0-indexed).
+- Label each entity as PROCEDURE, ANATOMY, PATHOLOGY, or CLINICAL_CONCEPT.
 
 Guidelines for ICD-10-PCS Mapping:
 - ICD-10-PCS codes must be exactly 7 characters long.
@@ -88,8 +100,13 @@ def analyze_surgical_report_gemini(report_text: str, api_key: str, model_name: s
     client = genai.Client(api_key=api_key)
     
     prompt = f"""
-You are a senior clinical coding expert specializing in ICD-10-PCS (Procedure Coding System).
+You are a senior clinical coding expert specializing in ICD-10-PCS (Procedure Coding System) and Clinical NER (Named Entity Recognition).
 Analyze the following surgical report and generate a structured response according to the requested schema.
+
+Guidelines for clinical entity extraction:
+- Extract all key clinical terms, organ names, procedures, and diagnoses.
+- For each entity, specify the exact start and end character indices in the original text (0-indexed).
+- Label each entity as PROCEDURE, ANATOMY, PATHOLOGY, or CLINICAL_CONCEPT.
 
 Guidelines for ICD-10-PCS Mapping:
 - ICD-10-PCS codes must be exactly 7 characters long.
@@ -164,7 +181,16 @@ def get_mock_analysis(report_text: str) -> ReportAnalysisResult:
                 ICD10CharBreakdown(position=7, character="Z", name="Qualifier", value_description="No Qualifier")
             ]
         )
-        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10])
+        
+        entities = [
+            ClinicalEntity(text="cholelithiasis", label="PATHOLOGY", start=30, end=44),
+            ClinicalEntity(text="acute cholecystitis", label="PATHOLOGY", start=46, end=65),
+            ClinicalEntity(text="Laparoscopic cholecystectomy", label="PROCEDURE", start=101, end=129),
+            ClinicalEntity(text="gallbladder", label="ANATOMY", start=184, end=195),
+            ClinicalEntity(text="cystic duct", label="ANATOMY", start=535, end=546),
+            ClinicalEntity(text="cystic artery", label="ANATOMY", start=556, end=569)
+        ]
+        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10], entities=entities)
         
     elif "appendectomy" in text_lower or "appendix" in text_lower:
         # Open Appendectomy Mock
@@ -199,7 +225,15 @@ def get_mock_analysis(report_text: str) -> ReportAnalysisResult:
                 ICD10CharBreakdown(position=7, character="Z", name="Qualifier", value_description="No Qualifier")
             ]
         )
-        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10])
+        
+        entities = [
+            ClinicalEntity(text="Acute appendicitis", label="PATHOLOGY", start=30, end=48),
+            ClinicalEntity(text="Open appendectomy", label="PROCEDURE", start=85, end=102),
+            ClinicalEntity(text="peritoneum", label="ANATOMY", start=380, end=390),
+            ClinicalEntity(text="appendix", label="ANATOMY", start=490, end=498),
+            ClinicalEntity(text="gangrenous appendicitis", label="PATHOLOGY", start=520, end=543)
+        ]
+        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10], entities=entities)
         
     elif "knee" in text_lower or "arthroplasty" in text_lower:
         # Total Knee Arthroplasty Mock
@@ -235,7 +269,15 @@ def get_mock_analysis(report_text: str) -> ReportAnalysisResult:
                 ICD10CharBreakdown(position=7, character="Z", name="Qualifier", value_description="No Qualifier")
             ]
         )
-        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10])
+        
+        entities = [
+            ClinicalEntity(text="osteoarthritis", label="PATHOLOGY", start=30, end=44),
+            ClinicalEntity(text="Total knee arthroplasty", label="PROCEDURE", start=90, end=113),
+            ClinicalEntity(text="femur", label="ANATOMY", start=450, end=455),
+            ClinicalEntity(text="tibia", label="ANATOMY", start=460, end=465),
+            ClinicalEntity(text="patella", label="ANATOMY", start=500, end=507)
+        ]
+        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10], entities=entities)
         
     else:
         # General Mock fallback
@@ -267,4 +309,10 @@ def get_mock_analysis(report_text: str) -> ReportAnalysisResult:
                 ICD10CharBreakdown(position=7, character="Z", name="Qualifier", value_description="No Qualifier")
             ]
         )
-        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10])
+        
+        entities = [
+            ClinicalEntity(text="inflammation", label="PATHOLOGY", start=40, end=52),
+            ClinicalEntity(text="biopsy", label="PROCEDURE", start=90, end=96),
+            ClinicalEntity(text="skin", label="ANATOMY", start=120, end=124)
+        ]
+        return ReportAnalysisResult(summary=summary, icd10_codes=[icd10], entities=entities)

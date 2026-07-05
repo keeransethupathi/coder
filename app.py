@@ -416,6 +416,7 @@ if analyze_button:
                 else:
                     results = analyze_surgical_report_ollama(report_input, model_option, ollama_host)
                 st.session_state.analysis_results = results
+                st.session_state.nlp_entities = results.entities
             except Exception as ai_err:
                 st.error(f"Execution Error: {ai_err}")
                 st.session_state.analysis_results = None
