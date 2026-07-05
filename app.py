@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-import ollama
 from dotenv import load_dotenv
 
 # Set page config
@@ -20,7 +19,6 @@ default_api_key = os.getenv("GEMINI_API_KEY", "")
 # Import engines
 from nlp_engine import extract_entities, render_html_markup
 from ai_engine import (
-    analyze_surgical_report_ollama, 
     analyze_surgical_report_gemini, 
     get_mock_analysis, 
     ReportAnalysisResult
@@ -262,62 +260,23 @@ The joint was irrigated again. The medial parapatellar incision was closed with 
 # ----------------- SIDEBAR & BACKEND CONFIGURATION -----------------
 
 st.sidebar.title("🛠️ AI Codification Engine")
-backend_choice = st.sidebar.radio(
-    "Choose LLM Backend",
-    ["☁️ Google Gemini API (Cloud Ready)", "🖥️ Local Ollama (HIPAA-Safe / Offline)"],
-    index=0,
-    help="Select whether to use the cloud-based Google Gemini API or a local offline Ollama LLM setup."
+
+api_key = st.sidebar.text_input(
+    "Gemini API Key", 
+    value=default_api_key, 
+    type="password",
+    help="Input your Gemini API key from Google AI Studio. If empty, the app defaults to demo mock mode."
+)
+model_option = st.sidebar.selectbox(
+    "Select Gemini Model",
+    ["gemini-2.5-flash", "gemini-2.5-pro"],
+    index=0
 )
 
-api_key = ""
-model_option = ""
 force_mock = False
-ollama_host = ""
-
-if "gemini" in backend_choice.lower():
-    api_key = st.sidebar.text_input(
-        "Gemini API Key", 
-        value=default_api_key, 
-        type="password",
-        help="Input your Gemini API key from Google AI Studio. If empty, the app defaults to demo mock mode."
-    )
-    model_option = st.sidebar.selectbox(
-        "Select Gemini Model",
-        ["gemini-2.5-flash", "gemini-2.5-pro"],
-        index=0
-    )
-    if not api_key.strip():
-        st.sidebar.warning("No API Key entered. Running in Mock fallback mode.")
-        force_mock = True
-else:
-    ollama_host = st.sidebar.text_input(
-        "Ollama Host URL", 
-        value="http://localhost:11434",
-        help="Endpoint for local Ollama server."
-    )
-    
-    # Check Ollama connection status
-    ollama_connected = False
-    downloaded_models = []
-    try:
-        client = ollama.Client(host=ollama_host)
-        models_data = client.list()
-        downloaded_models = [m.get("model") for m in models_data.get("models", [])]
-        ollama_connected = True
-    except Exception:
-        pass
-        
-    if ollama_connected and downloaded_models:
-        model_option = st.sidebar.selectbox(
-            "Select Ollama Model",
-            downloaded_models,
-            index=0 if "meditron:latest" not in downloaded_models else downloaded_models.index("meditron:latest")
-        )
-        force_mock = st.sidebar.checkbox("Force Demo Mode (Mock data)", value=False)
-    else:
-        st.sidebar.warning("🔌 Local Ollama Offline. Defaulting to mock demo fallback mode.")
-        model_option = "Mock fallback mode"
-        force_mock = True
+if not api_key.strip():
+    st.sidebar.warning("No API Key entered. Running in Mock fallback mode.")
+    force_mock = True
 
 st.sidebar.divider()
 st.sidebar.title("📄 Report Input Selector")
@@ -336,19 +295,12 @@ else:
 
 # ----------------- APP HEADER RENDERING -----------------
 
-# Render status indicators depending on chosen backend and status
-if "gemini" in backend_choice.lower() and not force_mock:
+# Render status indicators depending on status
+if not force_mock:
     status_html = (
         f'<div class="status-pill status-ready">'
         f'<span class="pulse-dot pulse-green"></span>'
         f'Gemini Active ({model_option})'
-        f'</div>'
-    )
-elif "ollama" in backend_choice.lower() and ollama_connected and not force_mock:
-    status_html = (
-        f'<div class="status-pill status-ready">'
-        f'<span class="pulse-dot pulse-green"></span>'
-        f'Local Ollama Active ({model_option})'
         f'</div>'
     )
 else:
@@ -414,10 +366,8 @@ if analyze_button:
             try:
                 if force_mock:
                     results = get_mock_analysis(clean_report)
-                elif "gemini" in backend_choice.lower():
-                    results = analyze_surgical_report_gemini(clean_report, api_key.strip(), model_option)
                 else:
-                    results = analyze_surgical_report_ollama(clean_report, model_option, ollama_host)
+                    results = analyze_surgical_report_gemini(clean_report, api_key.strip(), model_option)
                 st.session_state.analysis_results = results
                 st.session_state.nlp_entities = results.entities
             except Exception as ai_err:
@@ -528,26 +478,8 @@ if st.session_state.analysis_results:
                 )
                 st.markdown(card_header_html, unsafe_allow_html=True)
                 
-                # Visual Grid Breakdown of the 7 characters
-                st.markdown("###### 🔍 7-Character Axis Code Breakdown")
-                
                 # Make sure the breakdown is sorted and complete
                 breakdown_list = sorted(code_obj.breakdown, key=lambda x: x.position)
-                
-                # Generate Grid items
-                grid_items = ""
-                for char in breakdown_list:
-                    grid_items += (
-                        f'<div class="breakdown-box">'
-                        f'<div class="breakdown-label">Pos {char.position}</div>'
-                        f'<div class="breakdown-char">{char.character}</div>'
-                        f'<div class="breakdown-label">{char.name}</div>'
-                        f'<div class="breakdown-desc" title="{char.value_description}">{char.value_description}</div>'
-                        f'</div>'
-                    )
-                
-                # Render grid
-                st.markdown(f'<div class="breakdown-grid">{grid_items}</div>', unsafe_allow_html=True)
                 
                 # Render a detailed mapping table for readability/export
                 table_data = []

@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field
 from typing import List
 import os
 import json
-import ollama
 from google import genai
 from google.genai import types
 
@@ -44,51 +43,7 @@ class ReportAnalysisResult(BaseModel):
     icd10_codes: List[ICD10PCSCode] = Field(description="Suggested ICD-10-PCS procedure codes with breakdowns")
     entities: List[ClinicalEntity] = Field(description="List of all key medical/clinical entities found in the text with offsets")
 
-# ----------------- DUAL BACKEND AI IMPLEMENTATION -----------------
-
-def analyze_surgical_report_ollama(report_text: str, model_name: str = "meditron:latest", host_url: str = None) -> ReportAnalysisResult:
-    """
-    Interfaces with a local Ollama instance to analyze the surgical report text.
-    """
-    client = ollama
-    if host_url:
-        client = ollama.Client(host=host_url)
-        
-    prompt = f"""
-You are a senior clinical coding expert specializing in ICD-10-PCS (Procedure Coding System) and Clinical NER (Named Entity Recognition).
-Analyze the following surgical report and generate a structured JSON response matching the requested schema.
-
-Guidelines for clinical entity extraction:
-- Extract all key clinical terms, organ names, procedures, and diagnoses.
-- For each entity, specify the exact start and end character indices in the original text (0-indexed).
-- Label each entity as PROCEDURE, ANATOMY, PATHOLOGY, or CLINICAL_CONCEPT.
-
-Guidelines for ICD-10-PCS Mapping:
-- ICD-10-PCS codes must be exactly 7 characters long.
-- Break down each character from position 1 to 7 detailing:
-  1. Section (e.g., 0 for Medical and Surgical)
-  2. Body System (e.g., F for Hepatobiliary System and Pancreas, D for Gastrointestinal)
-  3. Root Operation (e.g., T for Resection, D for Extraction, B for Excision)
-  4. Body Part (e.g., 4 for Gallbladder, J for Appendix)
-  5. Approach (e.g., 4 for Percutaneous Endoscopic, 0 for Open)
-  6. Device (e.g., Z for No Device)
-  7. Qualifier (e.g., Z for No Qualifier)
-- Ensure high mapping accuracy based on clinical guidelines.
-
-Surgical Report:
-\"\"\"
-{report_text}
-\"\"\"
-"""
-
-    response = client.chat(
-        model=model_name,
-        messages=[{'role': 'user', 'content': prompt}],
-        format=ReportAnalysisResult.model_json_schema()
-    )
-    
-    return ReportAnalysisResult.model_validate_json(response['message']['content'])
-
+# ----------------- GEMINI AI ENGINE IMPLEMENTATION -----------------
 
 def analyze_surgical_report_gemini(report_text: str, api_key: str, model_name: str = "gemini-2.5-flash") -> ReportAnalysisResult:
     """
